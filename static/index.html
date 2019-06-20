@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link href="https://fonts.googleapis.com/css?family=Noto+Sans&display=swap" rel="stylesheet">
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+    <link href="https://stackpath.bootstrapcdn.com/bootswatch/4.3.1/darkly/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+    <link href="/static/dashboard.css" rel="stylesheet">
+    <title>ApexReplay</title>
+  </head>
+  <body>
+<div id="app">
+  <nav class="navbar navbar-dark fixed-top bg-dark flex-md-nowrap p-0 shadow">
+    <a class="navbar-brand col-sm-3 col-md-2 mr-0" href="#">ApexReplay</a>
+  </nav>
+
+  <div class="container-fluid">
+    <div class="row">
+      <nav class="col-md-2 d-none d-md-block bg-light sidebar">
+        <div class="sidebar-sticky">
+          <h3 class="d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-muted">
+            Track
+          </h3>
+          <ul class="nav flex-column">
+            <li class="nav-item" v-for="t in tracks">
+              <a class="nav-link" v-on:click="select(t.name, t.id)" v-bind:class="{'active':track != null && track === t.name}">
+                {{t.name}}
+              </a>
+            </li>
+          </ul>
+        </div>
+      </nav>
+      <main role="main" class="col-md-10 ml-sm-auto col-lg-10 px-2">
+        <h1 class="h2" v-if="track">
+          Track {{track}}
+        </h1>
+        <div class="row">
+          <div class="col-md-3">
+            <div v-if="sessions">
+              <listsessions v-bind:sessions="sessions" v-bind:session="session"></listsessions>
+            </div>
+          </div>
+          <div class="col-md-7 offset-md-3 position-fixed" v-if="pilots" >
+            <h2 v-if="session">{{session.name}}</h2>
+            <sessiongrid v-bind:pilots="pilots" v-bind:laps="laps"></sessiongrid>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</div>
+
+    
+    <!-- dev -->
+    <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vue-resource@1.5.1"></script>
+    <!-- Production -->
+    <!--<script src="https://cdn.jsdelivr.net/npm/vue"></script>-->
+<script>
+
+
+// register the grid component
+Vue.component('sessiongrid', {
+  template: `
+  <table class="table table-striped table-sm table-dark">
+    <thead>
+      <tr>
+        <th v-for="p in pilots">
+          {{ p.name }}
+        </th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr v-for="lapindex in laps">
+        <td v-for="p in pilots">
+          {{p.laps[lapindex]}}
+        </td>
+      </tr>
+    </tbody>
+  </table>`,
+  props: [
+    'pilots',
+    'laps'
+  ]
+
+});
+Vue.component('listsessions', {
+  template: `
+  <table class="table table-hover table-striped table-sm">
+    <tbody>
+      <tr v-for="s in sessions" v-on:click="selectsession(s.id, s.ts)" v-bind:class="{'table-active': session && session.id == s.id}">
+        <td>
+          <span class="small">{{ s.ts }}</span>
+        </td>
+        <td>
+          <span class="badge badge-primary">{{ s.bestlap }}</span>
+        </td>
+        <td>
+          <span class="badge badge-small badge-secondary">{{ s.bestlap_name }}</span>
+        </td>
+      </tr>
+    </tbody>
+  </table>`,
+  props: [
+    'sessions',
+    'session'
+  ],
+  methods: {
+    selectsession(session_id, ts) {
+      app.selectsession(session_id, ts);
+    }
+  }
+});
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    tracks: [],
+    sessions: [],
+    session: null,
+    track: null,
+    pilots: [],
+    laps: 0
+  },
+  methods: {
+    init: function() {
+      this.$http.get("/api/tracks").then(response => {
+        this.$data.tracks = response.body;
+      })
+    },
+    select: function(track_name, track_id) {
+      this.$data.pilots = []
+      this.$data.laps = 0;
+      this.$data.session = null;
+      this.$data.track = track_name;
+      this.$http.get("/api/track/"+track_id).then(response => {
+        this.$data.sessions = response.body;
+      })
+    },
+    selectsession: function(session_id, ts) {
+      this.$http.get('/api/session/'+session_id).then(response => {
+        var pilots = [];
+        var laps = 0;
+        var maxlaps = 0;
+        for(var pilot of response.body) {
+          if (pilot.laps.length > maxlaps) {
+            maxlaps = pilot.laps.length;
+          }
+        }
+        this.$data.laps = maxlaps;
+        this.$data.pilots = response.body;
+        this.$data.session = {
+          id: session_id,
+          name: ts
+        };
+      })
+    }
+  }
+});
+
+
+app.init();
+</script>
+  </body>
+</html>
