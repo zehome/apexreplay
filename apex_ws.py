@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# pip install aiohttp websockets aiofiles
+# pip install aiohttp aiofiles
 
 import aiofiles
 import aiohttp
@@ -9,7 +9,6 @@ import asyncio
 import logging
 import os
 import re
-import websockets
 
 logger = logging.getLogger(__name__)
 
@@ -19,15 +18,18 @@ CONFIGHOST = "www.apex-timing.com"
 
 async def wsdump(uri, name, cursor):
     logger.debug("connecting to %s", uri)
-    async with websockets.connect(uri) as websocket:
-        logger.debug("connected to %s", uri)
-        while True:
-            frame = await websocket.recv()
-            print("<[{name}] {frame}".format(name=name, frame=frame[:16].split('\n')[0].strip()))
-            await cursor.execute(
-                "INSERT INTO apex_live_ws(name, frame) VALUES (%s, %s)",
-                (name, frame)
-            )
+    async with aiohttp.ClientSession() as session:
+        async with session.ws_connect(uri) as websocket:
+            logger.debug("connected to %s", uri)
+            while True:
+                msg = await websocket.receive()
+                frame = msg.data 
+                print("<[{name}] {frame}".format(name=name, frame=frame[:16].split('\n')[0].strip()))
+                if frame:
+                    await cursor.execute(
+                        "INSERT INTO apex_live_ws(name, frame) VALUES (%s, %s)",
+                        (name, frame)
+                    )
 
 # http://www.apex-timing.com/live-timing/commonv2/javascript/javascript_live_timing.min.js
 # => configHost
@@ -41,7 +43,7 @@ async def fetch(session, url):
     async with session.get(url) as response:
         return await response.text()
 
-async def timingdump(db, track):
+async def timingdump(pool, track):
     url = track["url"]
     config_url = track["url"] + '/javascript/config.js'
 
@@ -52,14 +54,17 @@ async def timingdump(db, track):
             raise ValueError("var configPort not found in config.js")
         configport = int(m.group(2)) + 2 # apex special tricks
         wsurl = f"ws://{CONFIGHOST}:{configport}"
-    print(f"Loop reading websocket {wsurl}")
-    async with db.cursor() as cur:
-        while True:
+    logger.info(f"Loop reading websocket {wsurl}")
+    while True:
+        db = await pool.acquire()
+        async with db.cursor() as cur:
             try:
                 await wsdump(
                     uri=wsurl, name=track["name"], cursor=cur)
-            except websockets.ConnectionClosedError:
-                print("websocket connection terminated. Resuming...")
+            except aiohttp.ClientError:
+                logger.warning("websocket connection terminated. Resuming...")
+            except Exception as e:
+                logger.warning("websocket unknown error: %s. Resuming...", e)
 
 async def main(dbname):
     pool = await aiopg.create_pool(database=dbname)
@@ -70,7 +75,7 @@ async def main(dbname):
             'name': r[0],
             'url': r[1],
         } for r in await cur.fetchall()]
-    tasks = [asyncio.create_task(timingdump(db, track)) for track in tracks]
+    tasks = [asyncio.create_task(timingdump(pool, track)) for track in tracks]
     await asyncio.wait(tasks)
 
 logging.basicConfig(level=logging.DEBUG)

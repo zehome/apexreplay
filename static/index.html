@@ -3,11 +3,12 @@
   <head>
     <!-- Required meta tags -->
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="viewport" content="width=1920">
     <link href="https://fonts.googleapis.com/css?family=Noto+Sans&display=swap" rel="stylesheet">
     <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
     <link href="https://stackpath.bootstrapcdn.com/bootswatch/4.3.1/darkly/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
     <link href="/static/dashboard.css" rel="stylesheet">
+    <link href="/static/fa/css/all.css" rel="stylesheet"> <!--load all styles -->
     <title>ApexReplay</title>
   </head>
   <body>
@@ -20,29 +21,32 @@
     <div class="row">
       <nav class="col-md-2 d-none d-md-block bg-light sidebar">
         <div class="sidebar-sticky">
-          <h3 class="d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-muted">
+          <h4 class="d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-muted">
             Track
           </h3>
           <ul class="nav flex-column">
             <li class="nav-item" v-for="t in tracks">
-              <a class="nav-link" v-on:click="select(t.name, t.id)" v-bind:class="{'active':track != null && track === t.name}">
-                {{t.name}}
+              <a
+                class="nav-link"
+                v-on:click="select(t.name, t.id)"
+                v-bind:class="{'active':track != null && track == t.name}"
+              >
+                <i class="fa fa-angle-right" v-show="track && track == t.name"></i>
+                  {{t.name}}
+                <i class="fa fa-angle-left" v-show="track && track == t.name"></i>
               </a>
             </li>
           </ul>
         </div>
       </nav>
       <main role="main" class="col-md-10 ml-sm-auto col-lg-10 px-2">
-        <h1 class="h2" v-if="track">
-          Track {{track}}
-        </h1>
         <div class="row">
           <div class="col-md-3">
-            <div v-if="sessions">
+            <div v-if="sessions" class="session-sticky">
               <listsessions v-bind:sessions="sessions" v-bind:session="session"></listsessions>
             </div>
           </div>
-          <div class="col-md-7 offset-md-3 position-fixed" v-if="pilots" >
+          <div class="col-md-7" v-if="pilots" >
             <h2 v-if="session">{{session.name}}</h2>
             <sessiongrid v-bind:pilots="pilots" v-bind:laps="laps"></sessiongrid>
           </div>
@@ -60,11 +64,18 @@
     <!--<script src="https://cdn.jsdelivr.net/npm/vue"></script>-->
 <script>
 
+function intervaltomillis(s) {
+  var minutes = parseInt(s.split(":")[0]);
+  var tmp = s.split(":")[1].split(".");
+  var seconds = parseInt(tmp[0]);
+  var millis = parseInt(tmp[1]);
+  return minutes * 60 * 1000 + seconds * 1000 + millis;
+}
 
 // register the grid component
 Vue.component('sessiongrid', {
   template: `
-  <table class="table table-striped table-sm table-dark">
+  <table class="table table-striped table-sm table-bordered table-small">
     <thead>
       <tr>
         <th v-for="p in pilots">
@@ -73,6 +84,16 @@ Vue.component('sessiongrid', {
       </tr>
     </thead>
     <tbody>
+      <tr>
+        <td v-for="p in pilots" class="bestlap">
+          <b>
+            {{ p.bestlap }}
+            <span v-show="isbestlap(p)" class="badge badge-success">
+              BEST
+            </span>
+          </b>
+        </td>
+      </tr>
       <tr v-for="lapindex in laps">
         <td v-for="p in pilots">
           {{p.laps[lapindex]}}
@@ -83,15 +104,33 @@ Vue.component('sessiongrid', {
   props: [
     'pilots',
     'laps'
-  ]
+  ],
+  methods: {
+    isbestlap: function (pilot) {
+      var laptime_ms = intervaltomillis(pilot.bestlap);
+      var bestlap_ms = 0;
+      for (p of this.pilots) {
+        var blms = intervaltomillis(p.bestlap);
+        if (bestlap_ms == 0 || blms < bestlap_ms) {
+          bestlap_ms = blms;
+        }
+      }
+      return laptime_ms <= bestlap_ms;
+    }
+  }
 
 });
 Vue.component('listsessions', {
   template: `
   <table class="table table-hover table-striped table-sm">
     <tbody>
-      <tr v-for="s in sessions" v-on:click="selectsession(s.id, s.ts)" v-bind:class="{'table-active': session && session.id == s.id}">
+      <tr
+        v-for="s in sessions"
+        v-on:click="selectsession(s.id, s.ts)"
+        v-bind:class="{'table-active': session && session.id == s.id}"
+      >
         <td>
+          <i v-show="session && session.id == s.id" class="fa fa-angle-right"></i>
           <span class="small">{{ s.ts }}</span>
         </td>
         <td>
@@ -99,6 +138,9 @@ Vue.component('listsessions', {
         </td>
         <td>
           <span class="badge badge-small badge-secondary">{{ s.bestlap_name }}</span>
+        </td>
+        <td>
+          <i v-show="session && session.id == s.id" class="fa fa-angle-left"></i>
         </td>
       </tr>
     </tbody>

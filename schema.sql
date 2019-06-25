@@ -14,14 +14,14 @@ CREATE TABLE track (
 
 CREATE TABLE session (
     id bigserial primary key,
-    id_track bigint references track(id),
+    id_track bigint references track(id) on delete cascade,
     ts timestamp not null,
     grid text not null
 );
 
 CREATE TABLE laps (
     id bigserial primary key,
-    id_session bigint references session(id),
+    id_session bigint references session(id) on delete cascade,
     name text,
     laptime interval not null
 );

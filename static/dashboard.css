@@ -38,6 +38,14 @@ body {
   }
 }
 
+.session-sticky {
+  position: relative;
+  top: 0;
+  height: calc(100vh - 120px);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
 .sidebar .nav-link {
   font-weight: 500;
 }
@@ -102,4 +110,17 @@ body {
 .form-control-dark:focus {
   border-color: transparent;
   box-shadow: 0 0 0 3px rgba(255, 255, 255, .25);
+}
+
+.table-active {
+  border-left: 2px solid red;
+  border-right: 2px solid red;
+}
+
+.table-small tr td {
+  font-size: 0.75rem;
+}
+
+.bestlap {
+  background-color: rgba(100, 255, 100, .05);
 }

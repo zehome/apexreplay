@@ -56,17 +56,37 @@ def laps(session_id):
     with db.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute(
             """
-            SELECT name, to_char(laptime, 'MI:SS.MS') AS laptime FROM laps
+            SELECT
+                name,
+                to_char(laptime, 'MI:SS.MS') AS laptime,
+                (
+                    SELECT
+                        to_char(min(blap.laptime), 'MI:SS.MS')
+                    FROM
+                        laps AS blap
+                    WHERE blap.name = laps.name AND blap.id_session = laps.id_session
+                    GROUP BY blap.name
+                ) AS bestlap
+            FROM laps
             WHERE id_session=%s
             ORDER BY name, id ASC
             """,
             (session_id,)
         )
         for r in cur:
-            pilots.setdefault(r["name"], []).append(r["laptime"])
+            p = pilots.setdefault(r["name"], {'laps': [], 'bestlap': ''})
+            p["laps"].append(r["laptime"])
+            p["bestlap"] = r["bestlap"]  # A bit watefull to do than single SQL
         return jsonify([
-            {"name": k, "laps": v} for k, v in pilots.items()])
+            {
+                "name": k,
+                "laps": v["laps"],
+                "bestlap": v["bestlap"],
+            }
+            for k, v in pilots.items()
+        ])
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    from gevent.pywsgi import WSGIServer
+    WSGIServer(('', 5000), app).serve_forever()

@@ -27,15 +27,16 @@ class Lap:
     def __str__(self):
         return td_to_str(self.last_lap)
 
-@dataclass(order=True)
+@dataclass(order=True, eq=True)
 class Pilot:
-    group: str = field(default="", repr=False)
-    position: int = field(default=0, repr=False)
-    number: int = field(default=0, repr=False, hash=True)
-    color: str = field(default="", repr=False)
-    club: str = field(default="", repr=False)
+    id: str = field(default="", repr=True, compare=False)
+    group: str = field(default="", repr=False, compare=False)
+    position: int = field(default=0, repr=False, compare=False)
+    number: int = field(default=0, repr=False, hash=True, compare=False)
+    color: str = field(default="", repr=False, compare=False)
+    club: str = field(default="", repr=False, compare=False)
     name: str = field(default="", repr=True, compare=True, hash=True)
-    laps: List[Lap] = field(default_factory=list)
+    laps: List[Lap] = field(default_factory=list, compare=False)
 
     def best_lap(self):
         bestlap = None
@@ -47,13 +48,19 @@ class Pilot:
         return bestlap
 
 
-@dataclass()
+@dataclass(eq=True)
 class Session:
-    name: str
-    date: datetime.datetime
-    grid_raw: str
-    grid: any
-    pilots: List[Pilot] = field(default_factory=list)
+    name: str = field(compare=False)
+    date: datetime.datetime = field(compare=False)
+    grid: any = field(compare=False)
+    grid_raw: str = field(compare=False)
+    mapping: List[dict] = field(default_factory=list, compare=False)
+    pilots: List[Pilot] = field(default_factory=list, compare=True)
+
+    def __post_init__(self):
+        self.invertmapping = {
+            v: k for k, v in self.mapping.items()
+        }
 
     def is_valid(self):
         for p in self.pilots:
@@ -66,6 +73,18 @@ class Session:
 
     def pilot(self, row_number):
         return self.pilots[row_number - 1]
+
+    def pilotbyname(self, name):
+        for pilot in self.pilots:
+            if pilot.name == name:
+                return pilot
+        return None
+
+    def pilotbyid(self, pid):
+        for pilot in self.pilots:
+            if pilot.id == pid:
+                return pilot
+        return None
 
     def best_laps(self):
         return {
@@ -120,7 +139,7 @@ class WsReader:
         with db.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             res = cur.execute("SELECT * FROM apex_live_ws where processed is null ORDER BY name, id ASC")
             for r in cur.fetchall():
-                print(".", end='', flush=True)
+                #print(".", end='', flush=True)
                 session = self.sessions.get(r["name"])
                 for line in r["frame"].splitlines():
                     self.readline(line, session, name=r["name"], ts=r["ts"])
@@ -133,31 +152,43 @@ class WsReader:
             self.save_session(session)
         elif ls[0] == "grid":
             html = "<table>{0}</table>".format(ls[2])
-            t = parse_table(html)
-            if t:
+            mapping, grid = parse_table(html)
+            if grid:
                 session = Session(
                     date=ts if ts else datetime.datetime.now(),
                     name=name,
-                    grid=t,
+                    grid=grid,
+                    mapping=mapping,
                     grid_raw=html,
                 )
+                for r in grid:
+                    pilot = Pilot(
+                        id=r["id"],
+                        number=r.get("number"),
+                        name=r["name"],
+                    )
+                    if "last_lap" in r:
+                        pilot.laps.append(Lap(last_lap=r["last_lap"]))
+                    session.append(pilot)
+                oldsession = self.sessions.get(name)
+                if oldsession == session:
+                    print("Previous session is the same: add laps")
+                    session.pilots = oldsession.pilots
                 self.sessions[name] = session
-                for r in t:
-                    if r:
-                        session.append(Pilot(
-                            group=r["group"],
-                            position=r["position"],
-                            number=r["number"],
-                            name=r["name"],
-                        ))
+
         elif session is not None:
-            m = re.match(r"r([0-9]+)c([0-9]+)", ls[0])
+            m = re.match(r"(r[0-9]+)(c[0-9]+)", ls[0])
             if m:
-                row = int(m.group(1))
-                column = wsmap.get(int(m.group(2)))
-                if column == "last_lap":
+                pid = m.group(1)
+                if pid == "r0":
+                    return
+                col = m.group(2)
+                pilot = session.pilotbyid(pid)
+                if not pilot:
+                    print(f"{pid} pilot not found in {session.pilots}")
+                colmap = session.invertmapping.get(col)
+                if colmap == "last_lap":
                     last_lap = str_to_interval(ls[2])
-                    pilot = session.pilot(row)
                     pilot.laps.append(Lap(last_lap=last_lap))
         return session
 
