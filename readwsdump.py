@@ -127,10 +127,13 @@ class WsReader:
             )
             id_session = cur.fetchone()[0]
             for pilot in session.pilots:
+                cur.execute(
+                    """INSERT INTO session_pilots(id_session, name, "number") VALUES (%s, %s, %s)
+                """, (id_session, pilot.name, pilot.number if pilot.number != 'None' else None))
                 for lap in pilot.laps:
                     cur.execute(
-                        "INSERT INTO laps(id_session, name, laptime) VALUES (%s, %s, %s)",
-                        (id_session, pilot.name, lap.last_lap),
+                        """INSERT INTO laps(id_session, name, "number", laptime) VALUES (%s, %s, %s, %s)""",
+                        (id_session, pilot.name, pilot.number, lap.last_lap),
                     )
         self.db.commit()
         del self.sessions[session.name]
@@ -186,10 +189,11 @@ class WsReader:
                 pilot = session.pilotbyid(pid)
                 if not pilot:
                     print(f"{pid} pilot not found in {session.pilots}")
-                colmap = session.invertmapping.get(col)
-                if colmap == "last_lap":
-                    last_lap = str_to_interval(ls[2])
-                    pilot.laps.append(Lap(last_lap=last_lap))
+                else:
+                    colmap = session.invertmapping.get(col)
+                    if colmap == "last_lap":
+                        last_lap = str_to_interval(ls[2])
+                        pilot.laps.append(Lap(last_lap=last_lap))
         return session
 
 if __name__ == "__main__":

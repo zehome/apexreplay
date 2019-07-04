@@ -38,7 +38,8 @@ def sessions(track_id):
                 SELECT
                     first_value(laps.id_session) OVER (PARTITION BY laps.id_session ORDER BY laps.laptime) AS id_session,
                     first_value(laps.laptime) OVER (PARTITION BY laps.id_session ORDER BY laps.laptime) AS bestlap,
-                    first_value(laps.name) OVER (PARTITION BY laps.id_session ORDER BY laps.laptime) as bestlap_name
+                    first_value(laps.name) OVER (PARTITION BY laps.id_session ORDER BY laps.laptime) as bestlap_name,
+                    first_value(laps.number) OVER (PARTITION BY laps.id_session ORDER BY laps.laptime) as bestlap_number
                 FROM laps
             ) lap ON (lap.id_session = session.id)
             WHERE id_track=%s
@@ -58,6 +59,7 @@ def laps(session_id):
             """
             SELECT
                 name,
+                "number",
                 to_char(laptime, 'MI:SS.MS') AS laptime,
                 (
                     SELECT
@@ -74,12 +76,13 @@ def laps(session_id):
             (session_id,)
         )
         for r in cur:
-            p = pilots.setdefault(r["name"], {'laps': [], 'bestlap': ''})
+            p = pilots.setdefault(r["name"], {'number': r["number"], 'laps': [], 'bestlap': ''})
             p["laps"].append(r["laptime"])
             p["bestlap"] = r["bestlap"]  # A bit watefull to do than single SQL
         return jsonify([
             {
                 "name": k,
+                "number": v["number"],
                 "laps": v["laps"],
                 "bestlap": v["bestlap"],
             }

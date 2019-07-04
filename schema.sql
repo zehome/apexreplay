@@ -19,9 +19,22 @@ CREATE TABLE session (
     grid text not null
 );
 
+CREATE TABLE session_pilots (
+    id bigserial primary key,
+    id_session bigint references session(id) on delete cascade,
+    name text not null,
+    "number" text
+);
+
 CREATE TABLE laps (
     id bigserial primary key,
     id_session bigint references session(id) on delete cascade,
     name text,
+    "number" text,
     laptime interval not null
 );
+
+
+create index on session_pilots(id_session);
+create index on session(id_track);
+create index on laps(id_session, name);
